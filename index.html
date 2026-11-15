@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Fit &amp; Frites — V7.5.1</title>
+<title>Fit &amp; Frites — V7.5.2</title>
 <style>
 :root{
   --bg:#f4f6f8; --card:#fff; --text:#1f2937; --muted:#6b7280; --border:#e5e7eb;
@@ -473,13 +473,33 @@ function showExerciseHistory(name){
 function muscleLastDays(m){
  const d=sessions.filter(s=>s.finalized&&s.date<=todayISO()&&s.exercises.some(e=>e.done&&e.kind!=="cardio"&&exerciseMuscles(e).includes(m))).sort((a,b)=>b.date.localeCompare(a.date))[0];if(!d)return 999;return Math.max(0,Math.round((new Date(todayISO())-new Date(d.date))/86400000));
 }
-function smartPlan(){
- const ranked=allMuscles.map(m=>({m,d:muscleLastDays(m)})).sort((a,b)=>b.d-a.d);const targets=ranked.filter(x=>x.d>=2).slice(0,4).map(x=>x.m);if(!targets.length)targets.push(...ranked.slice(0,3).map(x=>x.m));
- const picks=[]; for(const m of targets){const ex=catalogue.find(e=>e.kind!=="cardio"&&(e.muscles||[]).includes(m)&&!picks.some(p=>p.name===e.name));if(ex)picks.push(ex)}
- const cardio=catalogue.find(e=>e.kind==="cardio");if(cardio)picks.push(cardio);return {targets,picks:picks.slice(0,6)};
+let plannerType='full',plannerSelected=null,plannerTarget='',plannerMessage='';
+function smartPlan(type=plannerType){
+ const templates={full:['Vélo','Shoulder Press','Seated Row','Seated Dip','Leg Press','Seated Leg Curl','Abdominal machine'],upper:['Vélo','Shoulder Press','Seated Row','Seated Dip','Rear Delt Fly','Lat Pulldown','Arm Curl'],legs:['Vélo','Leg Press','Seated Leg Curl','Leg Extension','Squats','Abdominal machine']};
+ const names=templates[type]||templates.full;
+ return {picks:names.map(name=>catalogue.find(e=>e.name===name)).filter(Boolean)};
+}
+function setPlannerType(type){plannerType=type;plannerSelected=null;plannerMessage='';renderDashboard()}
+function togglePlannerItem(name,checked){if(plannerSelected===null)plannerSelected=new Set(smartPlan().picks.map(e=>e.name));if(checked)plannerSelected.add(name);else plannerSelected.delete(name)}
+function renderPlanner(){
+ const active=sessions.filter(s=>!s.finalized).sort((a,b)=>b.date.localeCompare(a.date));
+ const target=active.find(s=>String(s.id)===plannerTarget)||active[0];
+ const options=[['full','Full body'],['upper','Haut du corps'],['legs','Jambes']].map(([v,label])=>`<option value="${v}" ${plannerType===v?'selected':''}>${label}</option>`).join('');
+ const picks=smartPlan().picks;
+ const rows=picks.map(e=>{const last=target?previousFor(target.id,e.name):exerciseHistory(e.name).at(-1);const ref=last?`${fmtDate(last.s.date)} · ${performanceText(last.e)}`:'Pas de référence';return `<label class="suggestion"><span><input type="checkbox" ${plannerSelected===null||plannerSelected.has(e.name)?'checked':''} onchange="togglePlannerItem(${jsArg(e.name)},this.checked)"> <b>${esc(exerciseLabel(e.name))}</b><br><small>${esc(ref)}</small></span></label>`}).join('');
+ const targets=active.length>1?`<label class="small">Séance à compléter <select onchange="plannerTarget=this.value;renderDashboard()">${active.map(s=>`<option value="${esc(s.id)}" ${target===s?'selected':''}>${esc(fmtDate(s.date))} · ${esc(String(s.id).slice(0,8))}</option>`).join('')}</select></label>`:'';
+ return `<div class="coach-plan"><b>⚡ Préparer ta séance</b><div class="small">Choisis une trame et les exercices. Les dernières valeurs sont des repères, à adapter.</div><label class="small">Type de séance <select onchange="setPlannerType(this.value)">${options}</select></label>${targets}<div class="suggestion-list">${rows||'<div class="small">Aucun exercice disponible pour cette trame.</div>'}</div><button type="button" class="validate" onclick="applySmartPlan()">Ajouter à ma séance</button>${plannerMessage?`<div class="small" role="status">${esc(plannerMessage)}</div>`:''}<div class="small">Les exercices déjà présents et tes valeurs saisies sont conservés. Vérifie ce que tu as réellement fait avant de valider la séance.</div></div>`;
 }
 function applySmartPlan(){
- const s=sessions.find(x=>!x.finalized);if(!s){alert("Crée d’abord une nouvelle séance.");return}const plan=smartPlan();plan.picks.forEach(ex=>{let i=s.exercises.findIndex(x=>x.name===ex.name);if(i<0)s.exercises.push(newExercise(ex,true));else s.exercises[i].done=true});save();
+ const active=sessions.filter(x=>!x.finalized).sort((a,b)=>b.date.localeCompare(a.date));const s=active.find(x=>String(x.id)===plannerTarget)||active[0];
+ if(!s){plannerMessage='Crée d’abord une nouvelle séance, puis reviens à la proposition.';renderDashboard();return}
+ const picks=smartPlan().picks.filter(e=>plannerSelected===null||plannerSelected.has(e.name));
+ if(!picks.length){plannerMessage='Choisis au moins un exercice dans la proposition.';renderDashboard();return}
+ let added=0,already=0;
+ for(const ex of picks){let existing=s.exercises.find(e=>e.name===ex.name);if(!existing){existing=newExercise(ex,true);s.exercises.push(existing);added++}else if(existing.done){already++}else{existing.done=true;added++}}
+ plannerMessage=`${added} exercice${added>1?'s':''} sélectionné${added>1?'s':''} · ${already} déjà présent${already>1?'s':''}. Retrouve-les dans la séance ci-dessous.`;
+ save();
+ const activeNode=document.getElementById('activeSessions');if(activeNode){for(const el of activeNode.querySelectorAll('details.category-block')){if(el.querySelector('tr.done'))el.open=true}}
 }
 function previousFor(sid,name){
  return exerciseHistory(name,sid).at(-1)||null;
@@ -809,8 +829,7 @@ function renderDashboard(){
    </div>
  </div>`;
  const a=coachAdvice();
- const plan=smartPlan();
- document.getElementById("coachTip").innerHTML=`<span class="badge ${a.badge}">${a.title}</span><div style="margin-top:7px">${a.text}</div><div class="coach-grid"><div class="coach-plan"><b>🧠 Que faire aujourd’hui ?</b><div class="small" style="margin-top:4px">Zones les moins travaillées récemment : ${plan.targets.map(esc).join(" • ")}</div><div class="coach-ex-list">${plan.picks.map(e=>`<span>${esc(exerciseLabel(e.name))}</span>`).join("")}</div></div><div class="coach-plan"><b>⚡ Préparer la séance</b><div class="small" style="margin:4px 0 9px">Présélectionne ces exercices dans la séance en cours. Tu peux tout modifier ensuite.</div><button class="validate" onclick="applySmartPlan()">Préparer cette séance</button></div></div>`;
+ document.getElementById("coachTip").innerHTML=`<span class="badge ${a.badge}">${a.title}</span><div style="margin-top:7px">${a.text}</div>${renderPlanner()}`;
 }
 function exerciseScopeStats(scope){
  const ss=scopeSessions(scope), map=Object.create(null);
