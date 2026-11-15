@@ -196,6 +196,7 @@ details summary{color:#f4f7fa}.collapsed-list{margin-top:12px}.collapsed-item su
     <button class="primary hero-action" onclick="addSession()">＋ Nouvelle séance</button>
     <label class="btn">↥ Importer JSON<input hidden type="file" accept=".json" onchange="importData(event)"></label>
     <button onclick="exportData()">↧ Exporter JSON</button>
+    <button id="driveBackupButton" onclick="backupToDrive()">☁ Sauvegarder sur Drive</button>
     <button class="danger icon-action" onclick="resetAll()" title="Tout effacer">⚙</button>
   </div>
 </header>
@@ -1133,6 +1134,7 @@ function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll('"',"&qu
 render();
 </script>
 
+<script src="./drive-backup.js"></script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js",{scope:"./"}).catch(console.warn));}</script>
 
 </body>
