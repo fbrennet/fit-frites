@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Fit &amp; Frites — V7.5</title>
+<title>Fit &amp; Frites — V7.5.1</title>
 <style>
 :root{
   --bg:#f4f6f8; --card:#fff; --text:#1f2937; --muted:#6b7280; --border:#e5e7eb;
@@ -450,17 +450,25 @@ function recentBest(sid,e){
  const best=h.reduce((a,b)=>Number(a.e.reps)>=Number(b.e.reps)?a:b);
  return `Meilleur récent à ce format : ${performanceText(best.e)} (${fmtDate(best.s.date)}). Sur les cinq dernières réalisations, dans les six dernières semaines.`;
 }
+function recentExerciseHistory(sid,e){
+ return exerciseHistory(e.name,sid).slice(-3).reverse();
+}
+function renderRecentExerciseHistory(sid,e){
+ const history=recentExerciseHistory(sid,e);
+ if(!history.length)return '<div class="small">Aucune séance précédente validée.</div>';
+ return `<details class="recent-best"><summary>Voir les ${history.length} dernière${history.length>1?'s':''} séance${history.length>1?'s':''}</summary>${history.map(x=>`<div class="small">${esc(fmtDate(x.s.date))} · ${esc(performanceText(x.e))}</div>`).join('')}</details>`;
+}
 function renderPerformance(s,i,e){
  if(!e.done)return '';
  const pm=performanceMeta(s.id,e),c=pm.comparison,best=recentBest(s.id,e);
  const icon={up:'↑',stable:'→',down:'↓',mixed:'↔',pending:'…',first:'•',unavailable:'—'}[c.status];
- return `<div class="performance-reference">${esc(pm.text)}</div><div class="progress-badge progress-${c.status}">${icon} ${esc(c.text)}</div>${pm.canCopy?`<button type="button" class="copy-last" onclick="copyLastValues(${jsArg(s.id)},${i})">↶ Reprendre les dernières valeurs</button>`:''}${pm.suggestion?`<div class="small load-advice">${esc(pm.suggestion)}</div>`:''}${best?`<details class="recent-best"><summary>Repère récent</summary><div class="small">${esc(best)}</div></details>`:''}`;
+ return `<div class="performance-reference">${esc(pm.text)}</div><div class="progress-badge progress-${c.status}">${icon} ${esc(c.text)}</div>${pm.canCopy?`<button type="button" class="copy-last" onclick="copyLastValues(${jsArg(s.id)},${i})">↶ Reprendre les dernières valeurs</button>`:''}${pm.suggestion?`<div class="small load-advice">${esc(pm.suggestion)}</div>`:''}${renderRecentExerciseHistory(s.id,e)}${best?`<details class="recent-best"><summary>Repère récent</summary><div class="small">${esc(best)}</div></details>`:''}`;
 }
 function showExerciseHistory(name){
  const h=exerciseHistory(name).sort((a,b)=>b.s.date.localeCompare(a.s.date)); const pb=personalBest(name); const ref=catalogue.find(x=>x.name===name)||h[0]?.e;
  const pbText=!pb?"Pas encore de référence comparable":ref?.kind==="cardio"?`Record distance : ${pb.distance.toFixed(1)} km • durée : ${pb.duration} min`:isTimed(ref)?`Durée max par série : ${pb.seconds} s`:ref?.kind==="body"?`Maximum enregistré : ${pb.reps} répétitions`:`Charge max : ${pb.weight} kg${isDumbbell(ref)?"/haltère (nouvel encodage)":""} • tonnage séance : ${Math.round(pb.tonnage).toLocaleString("fr-FR")} kg • max rép. : ${pb.reps}`;
  const rows=h.slice(0,10).map(x=>`<div class="perf-row"><b>${fmtDate(x.s.date)}</b><div>${esc(performanceText(x.e))}${x.e.kind==="weight"&&!isTimed(x.e)?` • ${Math.round(exerciseTonnage(x.e)).toLocaleString("fr-FR")} kg de tonnage`:""}</div></div>`).join("");
- const el=document.createElement("div");el.className="perf-modal";el.onclick=e=>{if(e.target===el)el.remove()};el.innerHTML=`<div class="perf-modal-card"><div style="display:flex;justify-content:space-between;gap:10px"><div><div class="label">Progression</div><h2 style="margin:3px 0">${esc(exerciseLabel(name))}</h2></div><button onclick="this.closest('.perf-modal').remove()">✕</button></div><div class="coach-plan"><b>🏆 ${pbText}</b></div><div style="margin-top:10px">${rows||'<div class="small">Aucune séance validée.</div>'}</div></div>`;document.body.appendChild(el);
+ const el=document.createElement("div");el.className="perf-modal";el.onclick=e=>{if(e.target===el)el.remove()};el.innerHTML=`<div class="perf-modal-card"><div style="display:flex;justify-content:space-between;gap:10px"><div><div class="label">Progression</div><h2 style="margin:3px 0">${esc(exerciseLabel(name))}</h2></div><button onclick="this.closest('.perf-modal').remove()">✕</button></div>${ref?.description?`<div class="small" style="margin:8px 0">${esc(ref.description)}</div>`:""}<div class="coach-plan"><b>🏆 ${pbText}</b></div><div style="margin-top:10px">${rows||'<div class="small">Aucune séance validée.</div>'}</div></div>`;document.body.appendChild(el);
 }
 function muscleLastDays(m){
  const d=sessions.filter(s=>s.finalized&&s.date<=todayISO()&&s.exercises.some(e=>e.done&&e.kind!=="cardio"&&exerciseMuscles(e).includes(m))).sort((a,b)=>b.date.localeCompare(a.date))[0];if(!d)return 999;return Math.max(0,Math.round((new Date(todayISO())-new Date(d.date))/86400000));
@@ -898,7 +906,7 @@ function toggleNewExerciseForm(){
  const el=document.getElementById('newExerciseFields');if(!el)return;
  if(el.style.display==='block'){el.style.display='none';el.innerHTML='';return}
  const cat=document.getElementById('browseExCat')?.value||'Haut du corps';
- el.innerHTML=`<div class="exercise-form-grid"><input id="newExName" type="text" placeholder="Nom du nouvel exercice"><select id="newExCat">${cats.map(c=>`<option ${c===cat?'selected':''}>${c}</option>`).join('')}</select><select id="newExKind"><option value="weight">Musculation</option><option value="body">Poids du corps</option><option value="cardio">Cardio</option></select><input class="full" id="newExMuscleText" type="text" placeholder="Description courte : Pectoraux • triceps"><div class="full muscle-checks">${allMuscles.map(m=>`<label><input type="checkbox" name="newMuscle" value="${m}"> ${m}</label>`).join('')}</div><div class="full"><button type="button" class="validate" onclick="addCustomExercise()">Ajouter au catalogue et à la séance</button></div></div>`;
+ el.innerHTML=`<div class="exercise-form-grid"><input id="newExName" type="text" placeholder="Nom du nouvel exercice"><select id="newExCat">${cats.map(c=>`<option ${c===cat?'selected':''}>${c}</option>`).join('')}</select><select id="newExKind"><option value="weight">Musculation</option><option value="body">Poids du corps</option><option value="cardio">Cardio</option></select><input class="full" id="newExMuscleText" type="text" placeholder="Muscles : pectoraux • triceps (facultatif)"><textarea class="full" id="newExDescription" rows="2" placeholder="Description facultative : assis, je pousse les poignées vers l’avant"></textarea><div class="full muscle-checks">${allMuscles.map(m=>`<label><input type="checkbox" name="newMuscle" value="${m}"> ${m}</label>`).join('')}</div><div class="full"><button type="button" class="validate" onclick="addCustomExercise()">Ajouter au catalogue et à la séance</button></div></div>`;
  el.style.display='block';
 }
 function addCustomExercise(){
@@ -906,7 +914,8 @@ function addCustomExercise(){
  if(catalogue.some(e=>e.name.toLowerCase()===name.toLowerCase()||exerciseLabel(e.name).toLowerCase()===name.toLowerCase())){alert('Cet exercice existe déjà.');return}
  const cat=document.getElementById('newExCat').value,kind=document.getElementById('newExKind').value,muscle=document.getElementById('newExMuscleText').value.trim()||'À préciser';
  const muscles=[...document.querySelectorAll('input[name="newMuscle"]:checked')].map(x=>x.value);
- const ex={name,cat,muscle,muscles,kind,custom:true}; customCatalogue.push(ex); catalogue=buildCatalogue(); localStorage.setItem('fit_frites_custom_catalogue',JSON.stringify(customCatalogue));
+ const description=document.getElementById('newExDescription').value.trim();
+ const ex={name,cat,muscle,muscles,kind,custom:true,...(description?{description}:{})}; customCatalogue.push(ex); catalogue=buildCatalogue(); localStorage.setItem('fit_frites_custom_catalogue',JSON.stringify(customCatalogue));
  sessions.filter(s=>!s.finalized).forEach(s=>s.exercises.push(newExercise(ex,true))); save(); renderExerciseManager();
 }
 function removeCustomExercise(i){
@@ -1066,7 +1075,7 @@ function validateImport(data){
   if(e.cat!==undefined&&!cats.includes(e.cat))fail(`${label} : catégorie inconnue.`);
   if(e.kind!==undefined&&!['weight','body','cardio'].includes(e.kind))fail(`${label} : type d’exercice inconnu.`);
   if(e.muscles!==undefined&&(!Array.isArray(e.muscles)||e.muscles.some(m=>typeof m!=='string')))fail(`${label} : muscles invalides.`);
-  for(const key of ['muscle','notes'])if(e[key]!==undefined&&typeof e[key]!=='string')fail(`${label} : ${key} doit être un texte.`);
+  for(const key of ['muscle','notes','description'])if(e[key]!==undefined&&typeof e[key]!=='string')fail(`${label} : ${key} doit être un texte.`);
   if(e.done!==undefined&&typeof e.done!=='boolean')fail(`${label} : sélection invalide.`);
   if(e.repUnit!==undefined&&!['seconds','perSide'].includes(e.repUnit))fail(`${label} : unité de répétitions non prise en charge.`);
   if(e.weightBasis!==undefined&&e.weightBasis!=='perHand')fail(`${label} : unité de poids non prise en charge.`);
